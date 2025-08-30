@@ -1,0 +1,3 @@
+id,title,city,type,rent_amount,security_deposit,bedrooms,bathrooms,area_size,furnishing,available_from,lease_duration,maintenance_charges,seller_name,seller_phone,seller_email,details
+1,2BHK Flat in Panipat,Panipat,Apartment,15000,100000,2,2,1000,Semi-Furnished,9/15/2024,12 months,2000,Tarun Kumar,7015409306,propertiesbudhiraja@gmail.com,Spacious 2BHK flat available for rent in prime location
+2,3BHK Villa in Panipat,Panipat,Villa,35000,300000,3,3,2500,Fully Furnished,9/1/2024,24 months,5000,Tarun Kumar,7015409306,propertiesbudhiraja@gmail.com,Luxury 3BHK villa with modern amenities and garden

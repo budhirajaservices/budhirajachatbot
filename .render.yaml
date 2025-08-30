@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: property-telegram-bot
+    env: docker
+    plan: free
+    dockerfilePath: Dockerfile
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: WEBHOOK_URL
+        fromService:
+          type: web
+          name: property-telegram-bot
+          property: url
+    healthCheckPath: /health
+    numInstances: 1
