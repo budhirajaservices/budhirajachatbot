@@ -114,7 +114,7 @@ def init_files():
             writer = csv.writer(f)
             writer.writerow([
                 'Timestamp', 'Name', 'Mobile', 'Email', 
-                'Message', 'Property ID', 'Chat ID'
+                'Message', 'Property ID', 'Chat ID', 'Status'
             ])
 
 # Start command
@@ -960,7 +960,7 @@ def process_property_purpose(message):
         print(f"Error in process_property_purpose: {e}")
         bot.send_message(
             user_id,
-            "❌ An error occurred. Let's start over.",
+            "❌ An error occurred. Let's try that again.",
             reply_markup=types.ReplyKeyboardRemove()
         )
         clear_user_state(user_id)
@@ -1002,7 +1002,7 @@ def process_property_description(message):
         print(f"Error in process_property_description: {e}")
         bot.send_message(
             user_id,
-            "❌ An error occurred. Let's start over.",
+            "❌ An error occurred. Let's try that again.",
             reply_markup=types.ReplyKeyboardRemove()
         )
         clear_user_state(user_id)
@@ -1042,7 +1042,7 @@ def process_property_price(message):
         print(f"Error in process_property_price: {e}")
         bot.send_message(
             user_id,
-            "❌ An error occurred. Let's start over.",
+            "❌ An error occurred. Let's try that again.",
             reply_markup=types.ReplyKeyboardRemove()
         )
         clear_user_state(user_id)
@@ -1082,7 +1082,7 @@ def process_property_location(message):
         print(f"Error in process_property_location: {e}")
         bot.send_message(
             user_id,
-            "❌ An error occurred. Let's start over.",
+            "❌ An error occurred. Let's try that again.",
             reply_markup=types.ReplyKeyboardRemove()
         )
         clear_user_state(user_id)
@@ -1125,7 +1125,7 @@ def process_property_area(message):
         print(f"Error in process_property_area: {e}")
         bot.send_message(
             user_id,
-            "❌ An error occurred. Let's start over.",
+            "❌ An error occurred. Let's try that again.",
             reply_markup=types.ReplyKeyboardRemove()
         )
         clear_user_state(user_id)
@@ -1181,7 +1181,7 @@ def process_property_bedrooms(message):
         print(f"Error in process_property_bedrooms: {e}")
         bot.send_message(
             user_id,
-            "❌ An error occurred. Let's start over.",
+            "❌ An error occurred. Let's try that again.",
             reply_markup=types.ReplyKeyboardRemove()
         )
         clear_user_state(user_id)
@@ -1230,7 +1230,7 @@ def process_property_bathrooms(message):
         print(f"Error in process_property_bathrooms: {e}")
         bot.send_message(
             user_id,
-            "❌ An error occurred. Let's start over.",
+            "❌ An error occurred. Let's try that again.",
             reply_markup=types.ReplyKeyboardRemove()
         )
         clear_user_state(user_id)
@@ -1271,7 +1271,7 @@ def process_property_owner_name(message):
         print(f"Error in process_property_owner_name: {e}")
         bot.send_message(
             user_id,
-            "❌ An error occurred. Let's start over.",
+            "❌ An error occurred. Let's try that again.",
             reply_markup=types.ReplyKeyboardRemove()
         )
         clear_user_state(user_id)
@@ -1333,7 +1333,7 @@ def process_property_owner_contact(message):
         print(f"Error in process_property_owner_contact: {e}")
         bot.send_message(
             user_id,
-            "❌ An error occurred. Let's start over.",
+            "❌ An error occurred. Let's try that again.",
             reply_markup=types.ReplyKeyboardRemove()
         )
         clear_user_state(user_id)
@@ -1491,7 +1491,6 @@ def process_inquiry_phone(message):
     except Exception as e:
         print(f"Error in process_inquiry_phone: {e}")
         handle_inquiry_error(user_id)
-
 def process_inquiry_email(message):
     """Process the visitor's email for the inquiry."""
     try:
@@ -1552,18 +1551,19 @@ def save_inquiry_to_csv(inquiry_data):
             if not file_exists:
                 writer.writerow([
                     'Timestamp', 'Name', 'Mobile', 'Email', 
-                    'Message', 'Property ID', 'Chat ID'
+                    'Message', 'Property ID', 'Chat ID', 'Status'
                 ])
             
-            # Write inquiry data
+            # Write inquiry data with all fields
             writer.writerow([
                 inquiry_data.get('timestamp', datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
                 inquiry_data.get('name', ''),
                 inquiry_data.get('phone', ''),
                 inquiry_data.get('email', ''),
-                inquiry_data.get('message', ''),
+                inquiry_data.get('message', '').replace('\n', ' ').replace('\r', ''),  # Clean up newlines
                 inquiry_data.get('property_id', ''),
-                str(inquiry_data.get('chat_id', ''))
+                inquiry_data.get('chat_id', ''),
+                'New'  # Default status
             ])
             
         return True
