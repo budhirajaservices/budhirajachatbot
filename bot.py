@@ -4,10 +4,16 @@ import json
 from datetime import datetime, timedelta
 import telebot
 from telebot import types
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import firebase_admin
 from firebase_admin import credentials, firestore, storage
 import uuid
+import pytz
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+
+# Google Sheets configuration
+GOOGLE_SHEETS_CREDENTIALS = 'service_account.json'  # Make sure this file exists
+GOOGLE_SHEET_NAME = 'Property Inquiries'  # Your Google Sheet name
 
 # Configuration
 BOT_TOKEN = "8253938305:AAFUdmflQn4avUjoleVERLr-YuuCAyCfURo"
@@ -21,6 +27,53 @@ VISITS_FILE = os.path.join(BASE_DIR, "visits.csv")
 RENT_PROPERTIES_FILE = os.path.join(BASE_DIR, "RentProperty.csv")
 INQUIRY_FILE = os.path.join(BASE_DIR, "Inquiry.csv")
 
+def save_to_google_sheets(data):
+    """Save inquiry data to Google Sheets."""
+    try:
+        # Set up credentials
+        scope = [
+            'https://spreadsheets.google.com/feeds',
+            'https://www.googleapis.com/auth/drive'
+        ]
+        creds = ServiceAccountCredentials.from_json_keyfile_name(
+            'service_account.json', scope
+        )
+        client = gspread.authorize(creds)
+        
+        # Open the Google Sheet
+        sheet = client.open('Property Inquiries').sheet1
+        
+        # Prepare the row data
+        row = [
+            data.get('timestamp', datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
+            data.get('name', ''),
+            data.get('phone', ''),
+            data.get('email', ''),
+            data.get('message', '').replace('\n', ' '),
+            data.get('property_id', ''),
+            data.get('chat_id', ''),
+            'New'  # Status
+        ]
+        
+        # Append the row
+        sheet.append_row(row)
+        return True
+        
+    except Exception as e:
+        print(f"Error saving to Google Sheets: {e}")
+        return False
+
+def handle_inquiry_error(user_id):
+    """Handle errors in the inquiry flow."""
+    try:
+        bot.send_message(
+            user_id,
+            "❌ An error occurred. Please try again by clicking /start",
+            reply_markup=types.ReplyKeyboardRemove()
+        )
+        clear_user_state(user_id)
+    except Exception as e:
+        print(f"Error in handle_inquiry_error: {e}")
 # Initialize bot
 bot = telebot.TeleBot(BOT_TOKEN)
 
@@ -1444,53 +1497,6 @@ def process_inquiry_name(message):
         print(f"Error in process_inquiry_name: {e}")
         handle_inquiry_error(user_id)
 
-def process_inquiry_phone(message):
-    """Process the visitor's phone number for the inquiry."""
-    try:
-        user_id = message.chat.id
-        state = get_user_state(user_id)
-        
-        if message.text and message.text.lower() in ['cancel', '❌ cancel']:
-            clear_user_state(user_id)
-            send_welcome(message)
-            return
-            
-        # Get phone number from contact or text
-        if message.contact and message.contact.phone_number:
-            phone = message.contact.phone_number
-            # Remove +91 if present
-            if phone.startswith('+91'):
-                phone = phone[3:]
-        else:
-            phone = ''.join(filter(str.isdigit, message.text.strip()))
-            
-        if len(phone) < 10:
-            msg = bot.send_message(
-                user_id,
-                "❌ Please enter a valid 10-digit mobile number:"
-            )
-            bot.register_next_step_handler(msg, process_inquiry_phone)
-            return
-            
-        # Store phone and move to next step
-        state['data']['phone'] = phone
-        state['step'] = 'email'
-        set_user_state(user_id, 'inquiry', state)
-        
-        # Ask for email
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        markup.add(types.KeyboardButton("❌ Cancel"))
-        
-        msg = bot.send_message(
-            user_id,
-            "📧 Please enter your email address:",
-            reply_markup=markup
-        )
-        bot.register_next_step_handler(msg, process_inquiry_email)
-        
-    except Exception as e:
-        print(f"Error in process_inquiry_phone: {e}")
-        handle_inquiry_error(user_id)
 def process_inquiry_email(message):
     """Process the visitor's email for the inquiry."""
     try:
@@ -1526,51 +1532,18 @@ def process_inquiry_email(message):
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
         markup.add(types.KeyboardButton("❌ Cancel"))
         
-        bot.send_message(
+        msg = bot.send_message(
             user_id,
             f"💬 Please enter your message or questions about the property:{property_info}\n\n"
             f"ℹ️ *Your Chat ID*: `{user_id}` (automatically included)",
             reply_markup=markup,
             parse_mode='Markdown'
         )
+        bot.register_next_step_handler(msg, process_inquiry_message)
         
     except Exception as e:
         print(f"Error in process_inquiry_email: {e}")
         handle_inquiry_error(user_id)
-
-def save_inquiry_to_csv(inquiry_data):
-    """Save inquiry data to CSV file."""
-    try:
-        file_path = os.path.join(BASE_DIR, "Inquiry.csv")
-        file_exists = os.path.isfile(file_path)
-        
-        with open(file_path, 'a', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            
-            # Write header if file doesn't exist
-            if not file_exists:
-                writer.writerow([
-                    'Timestamp', 'Name', 'Mobile', 'Email', 
-                    'Message', 'Property ID', 'Chat ID', 'Status'
-                ])
-            
-            # Write inquiry data with all fields
-            writer.writerow([
-                inquiry_data.get('timestamp', datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
-                inquiry_data.get('name', ''),
-                inquiry_data.get('phone', ''),
-                inquiry_data.get('email', ''),
-                inquiry_data.get('message', '').replace('\n', ' ').replace('\r', ''),  # Clean up newlines
-                inquiry_data.get('property_id', ''),
-                inquiry_data.get('chat_id', ''),
-                'New'  # Default status
-            ])
-            
-        return True
-    except Exception as e:
-        print(f"Error saving inquiry to CSV: {e}")
-        return False
-
 def process_inquiry_message(message):
     """Process the visitor's message for the inquiry."""
     try:
@@ -1592,11 +1565,67 @@ def process_inquiry_message(message):
             'email': state['data'].get('email', ''),
             'message': state['data'].get('message', ''),
             'property_id': state.get('property_id', ''),
-            'chat_id': state['data'].get('chat_id', str(user_id)),  # Ensure chat_id is always set
+            'chat_id': str(user_id),
             'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         }
         
         # Save to CSV
+        csv_success = save_inquiry_to_csv(inquiry_data)
+        
+        # Save to Google Sheets
+        sheets_success = save_to_google_sheets(inquiry_data)
+        
+        if csv_success or sheets_success:
+            # Save to Firebase if available
+            if 'db' in globals():
+                save_inquiry(inquiry_data)
+            
+            # Send confirmation to user
+            bot.send_message(
+                user_id,
+                "✅ *Thank you for your inquiry!*\n\n"
+                "We've received your message and will get back to you shortly.",
+                parse_mode='Markdown',
+                reply_markup=types.ReplyKeyboardRemove()
+            )
+            
+            # Send notification to admin
+            try:
+                admin_message = (
+                    f"📩 *New Inquiry Received*\n\n"
+                    f"👤 *Name:* {inquiry_data['name']}\n"
+                    f"📱 *Mobile:* {inquiry_data['phone']}\n"
+                    f"📧 *Email:* {inquiry_data.get('email', 'Not provided')}\n"
+                    f"💬 *Message:* {inquiry_data['message']}\n"
+                    f"🆔 *Chat ID:* `{user_id}`"
+                )
+                
+                if inquiry_data.get('property_id'):
+                    admin_message += f"\n🏠 *Property ID:* {inquiry_data['property_id']}"
+                
+                bot.send_message(
+                    ADMIN_CHAT_ID,
+                    admin_message,
+                    parse_mode='Markdown'
+                )
+            except Exception as e:
+                print(f"Error sending admin notification: {e}")
+        else:
+            raise Exception("Failed to save inquiry to both CSV and Google Sheets")
+        
+        # Clear state and show welcome
+        clear_user_state(user_id)
+        send_welcome(message)
+        
+    except Exception as e:
+        print(f"Error in process_inquiry_message: {e}")
+        bot.send_message(
+            user_id,
+            "❌ An error occurred while saving your inquiry. Please try again.",
+            reply_markup=types.ReplyKeyboardRemove()
+        )
+        clear_user_state(user_id)
+        send_welcome(message)
         if save_inquiry_to_csv(inquiry_data):
             # Save to Firebase as well
             try:
@@ -2530,7 +2559,26 @@ def process_visit_schedule(message):
     
     # Return to rent property menu
     handle_rent_property(message)
+# Add message handlers for the inquiry flow
+@bot.message_handler(func=lambda message: get_user_state(message.chat.id).get('state') == 'inquiry' and 
+                                  get_user_state(message.chat.id).get('step') == 'name')
+def handle_inquiry_name(message):
+    process_inquiry_name(message)
 
+@bot.message_handler(func=lambda message: get_user_state(message.chat.id).get('state') == 'inquiry' and 
+                                  get_user_state(message.chat.id).get('step') == 'phone')
+def handle_inquiry_phone(message):
+    process_inquiry_phone(message)
+
+@bot.message_handler(func=lambda message: get_user_state(message.chat.id).get('state') == 'inquiry' and 
+                                  get_user_state(message.chat.id).get('step') == 'message')
+def handle_inquiry_message(message):
+    process_inquiry_message(message)
+
+@bot.message_handler(func=lambda message: get_user_state(message.chat.id).get('state') == 'inquiry' and 
+                                  get_user_state(message.chat.id).get('step') == 'email')
+def handle_inquiry_email(message):
+    process_inquiry_email(message)
 # Initialize the bot
 if __name__ == "__main__":
     print("🤖 Bot is starting...")
