@@ -2586,6 +2586,3 @@ if __name__ == "__main__":
     print("✅ Data files initialized")
     print("🤖 Bot is running...")
     bot.polling(none_stop=True)
-
-
-
